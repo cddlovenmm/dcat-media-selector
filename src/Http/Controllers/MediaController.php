@@ -8,6 +8,7 @@ use DeMemory\DcatMediaSelector\Helpers\ApiResponse;
 use DeMemory\DcatMediaSelector\Helpers\FileUtil;
 use DeMemory\DcatMediaSelector\Models\Media;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -87,25 +88,50 @@ class MediaController
         $path = "$dir/$newName";
 
         $type = FileUtil::verifyFileType($file);
+        //上传后文件夹
+        $uploadImagePath = 'picture_library';
+
+        //上传后完整文件地址
+        $uploadedUrl = $uploadImagePath . '/uploads/' . $path;
 
         if ($result) {
             $data = [
-                'admin_id'       => Admin::user()->id ?? 0,
+                'admin_id' => Admin::user()->id ?? 0,
                 'media_group_id' => $mediaGroupId,
-                'path'           => $path,
-                'file_name'      => $newName,
-                'size'           => $file->getSize(),
-                'type'           => $type,
-                'file_ext'       => $file->getClientOriginalExtension(),
-                'disk'           => config('admin.upload.disk'),
-                'meta'           => json_encode(FileUtil::metaInfo($file)),
-                'created_at'     => time()
+                'path' => $uploadedUrl,
+                'file_name' => $newName,
+                'size' => $file->getSize(),
+                'type' => $type,
+                'file_ext' => $file->getClientOriginalExtension(),
+                'disk' => config('admin.upload.disk'),
+                'meta' => json_encode(FileUtil::metaInfo($file)),
+                'created_at' => time()
             ];
             Media::query()->insert($data);
         }
 
+        //读取文件内容
+        $imgUrl = env_new('APP_URL') . '/uploads/' . $path;
+
+        //读取文件流
+        $imageContents = file_get_contents($imgUrl);
+
+        //读取文件地址
+        $imgNameArr = explode("/", $imgUrl);
+        $imgName = $imgNameArr[count($imgNameArr) - 1];
+
+        //文件目录处理
+        $filePathArr = explode("/", $path);
+        $filePath = $filePathArr[0];
+
+        //上传文件配置
+        $url = env_new('UPLOAD_IMAGE_URL') . '/upload.php';
+
+        //上传文件
+        Http::asForm()->post($url, ['path' => $uploadImagePath . '/uploads/' . $filePath . '/', 'file' => $imageContents, 'file_name' => $imgName]);
+
         return $result
-            ? $this->success(['name' => Helper::basename($path), 'path' => $path, 'media_type' => $type, 'url' => $disk->url($path)])
+            ? $this->success(['name' => Helper::basename($path), 'path' => $path, 'media_type' => $type, 'url' => env_new('IMG_URL') .$uploadedUrl])
             : $this->failed('上传失败');
     }
 
